@@ -1022,19 +1022,116 @@
     return true;
   }
 
-  function createPuzzle(grid, level) {
-    const puzzle = grid.map(row => [...row]);
-    const cellsToRemove = getCellsToRemove(level);
-    const positions = [];
-    for (let i = 0; i < 81; i++) positions.push(i);
-    shuffle(positions);
-    for (let i = 0; i < cellsToRemove; i++) {
-      const pos = positions[i];
+  // ===== 唯一解校验：位运算 + 最少候选数（MRV）的回溯求解器 =====
+  const ALL_DIGITS = 0x1ff;
+  const POPCOUNT = (() => {
+    const table = new Uint8Array(512);
+    for (let i = 1; i < 512; i++) table[i] = table[i >> 1] + (i & 1);
+    return table;
+  })();
+
+  // 最多找 limit 个解就提前返回（判断唯一解只需 limit = 2）
+  function countSolutions(puzzle, limit = 2) {
+    const grid = new Uint8Array(81);
+    const rows = new Uint16Array(9);
+    const cols = new Uint16Array(9);
+    const boxes = new Uint16Array(9);
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        const val = puzzle[r][c];
+        if (!val) continue;
+        const bit = 1 << (val - 1);
+        grid[r * 9 + c] = val;
+        rows[r] |= bit;
+        cols[c] |= bit;
+        boxes[((r / 3) | 0) * 3 + ((c / 3) | 0)] |= bit;
+      }
+    }
+
+    let found = 0;
+
+    function search() {
+      // 每步都挑候选数最少的空格，搜索树会小很多
+      let bestIndex = -1;
+      let bestMask = 0;
+      let bestPop = 10;
+      for (let i = 0; i < 81; i++) {
+        if (grid[i]) continue;
+        const r = (i / 9) | 0;
+        const c = i % 9;
+        const box = ((r / 3) | 0) * 3 + ((c / 3) | 0);
+        const mask = ALL_DIGITS & ~(rows[r] | cols[c] | boxes[box]);
+        if (mask === 0) return; // 该空格无数可填，此路不通
+        const pop = POPCOUNT[mask];
+        if (pop < bestPop) {
+          bestPop = pop;
+          bestIndex = i;
+          bestMask = mask;
+          if (pop === 1) break;
+        }
+      }
+      if (bestIndex === -1) { // 已无空格，得到一个完整解
+        found++;
+        return;
+      }
+      const r = (bestIndex / 9) | 0;
+      const c = bestIndex % 9;
+      const box = ((r / 3) | 0) * 3 + ((c / 3) | 0);
+      let mask = bestMask;
+      while (mask) {
+        const bit = mask & -mask;
+        mask ^= bit;
+        const val = 32 - Math.clz32(bit); // 1..9
+        grid[bestIndex] = val;
+        rows[r] |= bit;
+        cols[c] |= bit;
+        boxes[box] |= bit;
+        search();
+        rows[r] ^= bit;
+        cols[c] ^= bit;
+        boxes[box] ^= bit;
+        grid[bestIndex] = 0;
+        if (found >= limit) return;
+      }
+    }
+
+    search();
+    return found;
+  }
+
+  // 逐格挖空，每挖一格都用求解器确认题目仍只有唯一解；会多解的格子填回去
+  function digUnique(solution, target) {
+    const puzzle = solution.map(row => [...row]);
+    const order = [];
+    for (let i = 0; i < 81; i++) order.push(i);
+    shuffle(order);
+    let removed = 0;
+    for (const pos of order) {
+      if (removed >= target) break;
       const row = Math.floor(pos / 9);
       const col = pos % 9;
+      const backup = puzzle[row][col];
+      if (backup === 0) continue;
       puzzle[row][col] = 0;
+      if (countSolutions(puzzle, 2) === 1) {
+        removed++;
+      } else {
+        puzzle[row][col] = backup;
+      }
     }
-    return puzzle;
+    return { puzzle, removed };
+  }
+
+  // 生成唯一解题目：某次挖空顺序没能挖到目标数量时换个顺序重试，取挖得最多的一次
+  function createPuzzle(solution, level) {
+    const target = getCellsToRemove(level);
+    let best = null;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const result = digUnique(solution, target);
+      if (!best || result.removed > best.removed) best = result;
+      if (result.removed >= target) return result.puzzle;
+    }
+    return best.puzzle; // 极端情况下退回挖空最多的一份，仍然是唯一解
   }
 
   function renderBoard() {
