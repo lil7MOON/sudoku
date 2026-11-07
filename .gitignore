@@ -1,0 +1,68 @@
+# ===== 操作系统 =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ===== 编辑器 / IDE =====
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.iml
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+*~
+.history/
+*.code-workspace
+
+# ===== 临时文件 =====
+*.tmp
+*.temp
+*.bak
+*.orig
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+~$*
+
+# ===== Node.js / 构建产物 =====
+# 本项目是纯静态页面，暂无依赖；以下规则为后续接入工具链预留
+node_modules/
+dist/
+build/
+out/
+.cache/
+.parcel-cache/
+.vite/
+.turbo/
+coverage/
+*.tsbuildinfo
+
+# 包管理器依赖锁文件：按需决定是否忽略（默认保留，便于复现）
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# ===== 环境变量与密钥 =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ===== 其他 =====
+*.zip
+*.rar
+*.7z

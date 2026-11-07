@@ -1,0 +1,1420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>经典数独游戏</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    overflow: hidden;
+    position: relative;
+  }
+  .dynamic-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    background: linear-gradient(-45deg, #667eea, #764ba2, #f093fb, #f5576c, #4facfe, #00f2fe);
+    background-size: 400% 400%;
+    animation: gradientBG 15s ease infinite;
+  }
+  @keyframes gradientBG {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .bg-blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.4;
+    animation: float 20s ease-in-out infinite;
+  }
+  .bg-blob:nth-child(1) { width: 400px; height: 400px; background: #ff6b6b; top: -100px; left: -100px; animation-delay: 0s; }
+  .bg-blob:nth-child(2) { width: 350px; height: 350px; background: #4ecdc4; bottom: -80px; right: -80px; animation-delay: -5s; }
+  .bg-blob:nth-child(3) { width: 300px; height: 300px; background: #ffe66d; top: 50%; left: 50%; transform: translate(-50%, -50%); animation-delay: -10s; }
+  .bg-blob:nth-child(4) { width: 250px; height: 250px; background: #a855f7; top: 20%; right: 10%; animation-delay: -15s; }
+  @keyframes float {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    25% { transform: translate(30px, -30px) scale(1.1); }
+    50% { transform: translate(-20px, 20px) scale(0.95); }
+    75% { transform: translate(20px, 20px) scale(1.05); }
+  }
+  .start-screen {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(15px);
+    border-radius: 32px;
+    padding: 60px 40px;
+    box-shadow: 0 25px 80px rgba(0,0,0,0.3), inset 0 0 60px rgba(102, 126, 234, 0.1);
+    max-width: 520px;
+    width: 100%;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+  }
+  .start-screen::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(102, 126, 234, 0.1) 0%, transparent 70%);
+    animation: pulseBg 8s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes pulseBg {
+    0%, 100% { transform: scale(1); opacity: 0.5; }
+    50% { transform: scale(1.2); opacity: 0.8; }
+  }
+  .sudoku-grid-animation {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    width: 180px;
+    height: 180px;
+    margin: 0 auto 30px;
+    padding: 8px;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 16px;
+    border: 3px solid rgba(102, 126, 234, 0.3);
+  }
+  .grid-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    font-weight: bold;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 8px;
+    animation: cellAppear 2s ease-out infinite;
+  }
+  .grid-cell:nth-child(1) { animation-delay: 0s; color: #667eea; }
+  .grid-cell:nth-child(2) { animation-delay: 0.1s; color: #f5576c; }
+  .grid-cell:nth-child(3) { animation-delay: 0.2s; color: #4ecdc4; }
+  .grid-cell:nth-child(4) { animation-delay: 0.3s; color: #ffa726; }
+  .grid-cell:nth-child(5) { animation-delay: 0.4s; color: #ab47bc; }
+  .grid-cell:nth-child(6) { animation-delay: 0.5s; color: #66bb6a; }
+  .grid-cell:nth-child(7) { animation-delay: 0.6s; color: #ef5350; }
+  .grid-cell:nth-child(8) { animation-delay: 0.7s; color: #29b6f6; }
+  .grid-cell:nth-child(9) { animation-delay: 0.8s; color: #7e57c2; }
+  @keyframes cellAppear {
+    0%, 70% { transform: scale(0); opacity: 0; }
+    80% { transform: scale(1.2); opacity: 1; }
+    90% { transform: scale(0.9); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .floating-number {
+    position: absolute;
+    font-size: 28px;
+    font-weight: bold;
+    opacity: 0.6;
+    animation: floatNumber 4s ease-in-out infinite;
+    pointer-events: none;
+  }
+  .floating-number:nth-child(1) { top: 20px; left: 20px; color: #667eea; animation-delay: 0s; }
+  .floating-number:nth-child(2) { top: 30px; right: 25px; color: #f5576c; animation-delay: 1s; }
+  .floating-number:nth-child(3) { bottom: 40px; left: 30px; color: #4ecdc4; animation-delay: 2s; }
+  .floating-number:nth-child(4) { bottom: 50px; right: 20px; color: #ffa726; animation-delay: 3s; }
+  @keyframes floatNumber {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-15px) rotate(5deg); }
+  }
+  .start-screen h1 {
+    font-size: 52px;
+    background: linear-gradient(135deg, #667eea, #764ba2, #f093fb, #f5576c);
+    background-size: 300% 300%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: gradientText 4s ease infinite;
+    margin-bottom: 15px;
+    text-shadow: none;
+    font-weight: 800;
+    letter-spacing: 2px;
+  }
+  @keyframes gradientText {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .start-screen .subtitle {
+    color: #666;
+    font-size: 18px;
+    margin-bottom: 40px;
+    font-weight: 500;
+    letter-spacing: 1px;
+  }
+  .start-btn {
+    width: 100%;
+    padding: 20px;
+    font-size: 24px;
+    font-weight: bold;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    margin-bottom: 20px;
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+    position: relative;
+    overflow: hidden;
+  }
+  .start-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    transition: left 0.5s;
+  }
+  .start-btn:hover::before {
+    left: 100%;
+  }
+  .start-btn:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 20px 40px rgba(102, 126, 234, 0.5);
+  }
+  .start-btn:active {
+    transform: translateY(-2px) scale(0.98);
+  }
+  .play-icon {
+    display: inline-block;
+    margin-right: 10px;
+    animation: bounceIcon 1s ease infinite;
+  }
+  @keyframes bounceIcon {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+  }
+  .hint-text {
+    font-size: 14px;
+    color: #999;
+    animation: fadeInOut 3s ease-in-out infinite;
+  }
+  @keyframes fadeInOut {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+  .rules-btn {
+    background: transparent;
+    border: 2px solid #e0e0e0;
+    color: #666;
+    padding: 10px 30px;
+    border-radius: 30px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .rules-btn:hover {
+    border-color: #667eea;
+    color: #667eea;
+    background: rgba(102, 126, 234, 0.05);
+  }
+  .rules-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    backdrop-filter: blur(5px);
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .rules-modal-overlay.show {
+    display: flex;
+  }
+  .rules-modal {
+    background: #fff;
+    border-radius: 24px;
+    padding: 40px;
+    max-width: 480px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 25px 80px rgba(0,0,0,0.3);
+    animation: slideUp 0.3s ease;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(30px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .rules-modal h2 {
+    font-size: 28px;
+    color: #333;
+    margin-bottom: 25px;
+    text-align: center;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .rules-modal .rule-section {
+    margin-bottom: 25px;
+  }
+  .rules-modal .rule-section:last-child {
+    margin-bottom: 0;
+  }
+  .rules-modal .rule-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #667eea;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .rules-modal .rule-content {
+    font-size: 14px;
+    color: #666;
+    line-height: 1.8;
+    padding-left: 28px;
+  }
+  .rules-modal .close-btn {
+    width: 100%;
+    margin-top: 30px;
+    padding: 14px;
+    font-size: 16px;
+    font-weight: bold;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .rules-modal .close-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+  }
+  .rules-modal .example-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    width: 120px;
+    height: 120px;
+    margin: 15px auto;
+    border: 2px solid #333;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .rules-modal .example-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+  }
+  .rules-modal .example-cell.highlighted {
+    background: #c7d2fe;
+  }
+  .game-container {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    padding: 30px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    max-width: 560px;
+    width: 100%;
+    position: relative;
+    z-index: 1;
+    display: none;
+  }
+  h1 {
+    text-align: center;
+    color: #333;
+    margin-bottom: 8px;
+    font-size: 32px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #888;
+    margin-bottom: 20px;
+    font-size: 14px;
+  }
+  .toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .toolbar-left, .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .level-selector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f3f4f6;
+    padding: 4px;
+    border-radius: 10px;
+  }
+  .level-btn {
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    background: transparent;
+    color: #666;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .level-btn:hover:not(.locked) {
+    background: #e5e7eb;
+    color: #333;
+  }
+  .level-btn.active {
+    background: #667eea;
+    color: #fff;
+  }
+  .level-btn.locked {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+  .level-btn.completed {
+    background: #10b981;
+    color: #fff;
+  }
+  .level-btn.completed::after {
+    content: '✓';
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    font-size: 10px;
+    background: #fff;
+    color: #10b981;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  select, button {
+    padding: 8px 16px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    background: #fff;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  select:hover, button:hover {
+    border-color: #667eea;
+  }
+  button.primary {
+    background: #667eea;
+    color: #fff;
+    border-color: #667eea;
+  }
+  button.primary:hover {
+    background: #5568d3;
+  }
+  button.success {
+    background: #10b981;
+    color: #fff;
+    border-color: #10b981;
+  }
+  button.success:hover {
+    background: #059669;
+  }
+  button.warning {
+    background: #f59e0b;
+    color: #fff;
+    border-color: #f59e0b;
+  }
+  button.warning:hover {
+    background: #d97706;
+  }
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .timer {
+    font-size: 18px;
+    font-weight: bold;
+    color: #667eea;
+    min-width: 80px;
+  }
+  .hints-count {
+    font-size: 14px;
+    font-weight: bold;
+    color: #f59e0b;
+    min-width: 60px;
+  }
+  .back-btn {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    border: 3px solid #333;
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 0 auto 20px;
+    max-width: 450px;
+    aspect-ratio: 1;
+  }
+  .cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(16px, 4vw, 24px);
+    font-weight: 500;
+    border: 1px solid #ddd;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: #fff;
+    user-select: none;
+    position: relative;
+  }
+  .cell:hover:not(.given) {
+    background: #eef2ff;
+  }
+  .cell.given {
+    background: #f3f4f6;
+    color: #111;
+    font-weight: 700;
+    cursor: default;
+  }
+  .cell.selected {
+    background: #c7d2fe !important;
+  }
+  .cell.highlight {
+    background: #e0e7ff;
+  }
+  .cell.same-number {
+    background: #ddd6fe;
+  }
+  .cell.error {
+    color: #ef4444 !important;
+    background: #fee2e2 !important;
+  }
+  .cell:nth-child(3n) { border-right: 2px solid #333; }
+  .cell:nth-child(9n) { border-right: none; }
+  .cell:nth-child(n+19):nth-child(-n+27),
+  .cell:nth-child(n+46):nth-child(-n+54) { border-bottom: 2px solid #333; }
+  .number-pad {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    max-width: 450px;
+    margin: 0 auto;
+  }
+  .num-btn {
+    padding: 12px 0;
+    font-size: 20px;
+    font-weight: 600;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .num-btn:hover {
+    border-color: #667eea;
+    background: #eef2ff;
+  }
+  .num-btn.erase {
+    background: #fef3c7;
+    border-color: #f59e0b;
+    color: #92400e;
+  }
+  .num-btn.erase:hover {
+    background: #fde68a;
+  }
+  .status-bar {
+    text-align: center;
+    margin-top: 16px;
+    font-size: 14px;
+    color: #666;
+    min-height: 20px;
+  }
+  .status-bar.success {
+    color: #10b981;
+    font-weight: bold;
+  }
+  .status-bar.error {
+    color: #ef4444;
+  }
+  .next-level-btn {
+    display: none;
+    margin: 10px auto 0;
+    padding: 10px 30px;
+    font-size: 16px;
+    animation: pulse 1s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+  }
+  .stars {
+    text-align: center;
+    font-size: 40px;
+    margin: 10px 0;
+    display: none;
+  }
+  .stars.show {
+    display: block;
+    animation: starPop 0.5s ease-out;
+  }
+  @keyframes starPop {
+    0% { transform: scale(0); opacity: 0; }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    backdrop-filter: blur(5px);
+  }
+  .modal-overlay.show {
+    display: flex;
+  }
+  .modal {
+    background: #fff;
+    border-radius: 20px;
+    padding: 30px;
+    max-width: 400px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .modal h2 {
+    font-size: 24px;
+    color: #333;
+    margin-bottom: 20px;
+  }
+  .modal .modal-stars {
+    font-size: 50px;
+    margin: 20px 0;
+  }
+  .modal .modal-time {
+    font-size: 16px;
+    color: #666;
+    margin-bottom: 20px;
+  }
+  .modal .modal-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+  @media (max-width: 480px) {
+    .start-screen { padding: 40px 25px; }
+    .start-screen h1 { font-size: 36px; }
+    .sudoku-grid-animation { width: 140px; height: 140px; }
+    .grid-cell { font-size: 18px; }
+    .game-container { padding: 20px; }
+    h1 { font-size: 24px; }
+    .toolbar { justify-content: center; }
+    .level-btn { width: 30px; height: 30px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+  <div class="dynamic-bg">
+    <div class="bg-blob"></div>
+    <div class="bg-blob"></div>
+    <div class="bg-blob"></div>
+    <div class="bg-blob"></div>
+  </div>
+
+  <div class="start-screen" id="start-screen">
+    <div class="floating-number">1</div>
+    <div class="floating-number">5</div>
+    <div class="floating-number">9</div>
+    <div class="floating-number">3</div>
+    
+    <div class="sudoku-grid-animation">
+      <div class="grid-cell">1</div>
+      <div class="grid-cell">2</div>
+      <div class="grid-cell">3</div>
+      <div class="grid-cell">4</div>
+      <div class="grid-cell">5</div>
+      <div class="grid-cell">6</div>
+      <div class="grid-cell">7</div>
+      <div class="grid-cell">8</div>
+      <div class="grid-cell">9</div>
+    </div>
+    
+    <h1>经典数独</h1>
+    <p class="subtitle">准备好挑战你的思维极限了吗？</p>
+    
+    <button class="start-btn" onclick="startGame()">
+      <span class="play-icon">▶</span> 开始挑战
+    </button>
+    
+    <button class="rules-btn" onclick="showRules()">
+      📖 游戏规则
+    </button>
+    
+    <p class="hint-text">点击按钮开始你的数独之旅</p>
+  </div>
+
+  <div class="rules-modal-overlay" id="rules-modal-overlay">
+    <div class="rules-modal">
+      <h2>📖 数独规则</h2>
+      
+      <div class="rule-section">
+        <div class="rule-title">🎯 目标</div>
+        <div class="rule-content">在9×9的格子中填入数字1-9，使得每行、每列和每个3×3宫格内的数字都不重复。</div>
+      </div>
+      
+      <div class="rule-section">
+        <div class="rule-title">📋 三个规则</div>
+        <div class="rule-content">
+          <strong>1. 每行</strong>：每行9个格子必须包含数字1-9，不能重复<br>
+          <strong>2. 每列</strong>：每列9个格子必须包含数字1-9，不能重复<br>
+          <strong>3. 宫格</strong>：每个3×3的宫格必须包含数字1-9，不能重复
+        </div>
+        <div class="example-grid">
+          <div class="example-cell">1</div><div class="example-cell">2</div><div class="example-cell">3</div>
+          <div class="example-cell">4</div><div class="example-cell highlighted">5</div><div class="example-cell">6</div>
+          <div class="example-cell">7</div><div class="example-cell">8</div><div class="example-cell">9</div>
+        </div>
+      </div>
+      
+      <div class="rule-section">
+        <div class="rule-title">🎮 游戏玩法</div>
+        <div class="rule-content">
+          <strong>点击</strong>：点击格子选中，再点击下方数字填入<br>
+          <strong>键盘</strong>：使用方向键移动，数字键1-9填入<br>
+          <strong>擦除</strong>：点击擦除按钮或按Backspace键
+        </div>
+      </div>
+      
+      <div class="rule-section">
+        <div class="rule-title">💡 提示</div>
+        <div class="rule-content">每关有3次提示机会，可以帮你填入一个正确数字。合理使用提示，但不要过度依赖哦！</div>
+      </div>
+      
+      <div class="rule-section">
+        <div class="rule-title">⭐ 评分</div>
+        <div class="rule-content">完成关卡后根据用时获得1-3颗星：<br>
+          ⭐⭐⭐ 快速完成（最佳成绩）<br>
+          ⭐⭐ 正常完成<br>
+          ⭐ 完成即可
+        </div>
+      </div>
+      
+      <button class="close-btn" onclick="closeRules()">知道了</button>
+    </div>
+  </div>
+
+  <div class="game-container" id="game-container">
+    <h1>🎯 经典数独</h1>
+    <p class="subtitle">第 <span id="current-level">1</span> 关 · 在每行、每列和每个3×3宫格中填入1-9</p>
+
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button class="back-btn" onclick="showStartScreen()">← 返回</button>
+        <div class="level-selector" id="level-selector">
+          <button class="level-btn active" onclick="selectLevel(1)">1</button>
+          <button class="level-btn locked" onclick="selectLevel(2)">2</button>
+          <button class="level-btn locked" onclick="selectLevel(3)">3</button>
+          <button class="level-btn locked" onclick="selectLevel(4)">4</button>
+          <button class="level-btn locked" onclick="selectLevel(5)">5</button>
+          <button class="level-btn locked" onclick="selectLevel(6)">6</button>
+          <button class="level-btn locked" onclick="selectLevel(7)">7</button>
+          <button class="level-btn locked" onclick="selectLevel(8)">8</button>
+          <button class="level-btn locked" onclick="selectLevel(9)">9</button>
+          <button class="level-btn locked" onclick="selectLevel(10)">10</button>
+        </div>
+      </div>
+      <div class="toolbar-right">
+        <span class="timer" id="timer">00:00</span>
+        <span class="hints-count" id="hints-count">💡 3</span>
+        <button class="warning" onclick="getHint()" id="hint-btn">💡 提示</button>
+        <button class="success" onclick="checkSolution()">✓ 检查</button>
+      </div>
+    </div>
+
+    <div class="board" id="board"></div>
+
+    <div class="number-pad">
+      <button class="num-btn" onclick="fillNumber(1)">1</button>
+      <button class="num-btn" onclick="fillNumber(2)">2</button>
+      <button class="num-btn" onclick="fillNumber(3)">3</button>
+      <button class="num-btn" onclick="fillNumber(4)">4</button>
+      <button class="num-btn" onclick="fillNumber(5)">5</button>
+      <button class="num-btn" onclick="fillNumber(6)">6</button>
+      <button class="num-btn" onclick="fillNumber(7)">7</button>
+      <button class="num-btn" onclick="fillNumber(8)">8</button>
+      <button class="num-btn" onclick="fillNumber(9)">9</button>
+      <button class="num-btn erase" onclick="eraseNumber()">⌫ 擦除</button>
+    </div>
+
+    <div class="status-bar" id="status">使用键盘数字键或点击下方按钮填入数字</div>
+    <div class="stars" id="stars"></div>
+    <button class="success next-level-btn" id="next-level-btn" onclick="nextLevel()">🚀 下一关</button>
+  </div>
+
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+      <h2 id="modal-title">🎉 恭喜通关！</h2>
+      <div class="modal-stars" id="modal-stars">⭐⭐⭐</div>
+      <div class="modal-time" id="modal-time">用时：1分30秒</div>
+      <div class="modal-buttons">
+        <button class="primary" onclick="nextLevel()">下一关</button>
+        <button onclick="closeModal()">返回游戏</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  let board = [];
+  let solution = [];
+  let givenCells = [];
+  let selectedCell = null;
+  let timerInterval = null;
+  let seconds = 0;
+  let gameWon = false;
+  let currentLevel = 1;
+  let completedLevels = [];
+  let hintsRemaining = 3;
+  let levelStars = {};
+
+  const startScreenEl = document.getElementById('start-screen');
+  const gameContainerEl = document.getElementById('game-container');
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+  const timerEl = document.getElementById('timer');
+  const hintsCountEl = document.getElementById('hints-count');
+  const hintBtn = document.getElementById('hint-btn');
+  const levelSelectorEl = document.getElementById('level-selector');
+  const currentLevelEl = document.getElementById('current-level');
+  const nextLevelBtn = document.getElementById('next-level-btn');
+  const starsEl = document.getElementById('stars');
+  const modalOverlay = document.getElementById('modal-overlay');
+  const modalTitle = document.getElementById('modal-title');
+  const modalStars = document.getElementById('modal-stars');
+  const modalTime = document.getElementById('modal-time');
+
+  // 音效系统
+  let audioCtx = null;
+  function getAudioContext() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioCtx;
+  }
+
+  function playSound(type) {
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+    oscillator.type = 'sine';
+
+    switch(type) {
+      case 'click':
+        // 短促的点击音
+        oscillator.frequency.setValueAtTime(800, now);
+        oscillator.frequency.exponentialRampToValueAtTime(600, now + 0.05);
+        gainNode.gain.setValueAtTime(0.15, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+        oscillator.start(now);
+        oscillator.stop(now + 0.08);
+        break;
+      case 'fill':
+        // 填入数字音
+        oscillator.frequency.setValueAtTime(523.25, now);
+        oscillator.frequency.setValueAtTime(659.25, now + 0.05);
+        gainNode.gain.setValueAtTime(0.12, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+        oscillator.start(now);
+        oscillator.stop(now + 0.12);
+        break;
+      case 'erase':
+        // 擦除音
+        oscillator.frequency.setValueAtTime(400, now);
+        oscillator.frequency.exponentialRampToValueAtTime(200, now + 0.1);
+        gainNode.gain.setValueAtTime(0.1, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        oscillator.start(now);
+        oscillator.stop(now + 0.1);
+        break;
+      case 'hint':
+        // 提示音
+        oscillator.frequency.setValueAtTime(880, now);
+        oscillator.frequency.setValueAtTime(1100, now + 0.1);
+        oscillator.frequency.setValueAtTime(1320, now + 0.2);
+        gainNode.gain.setValueAtTime(0.15, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        oscillator.start(now);
+        oscillator.stop(now + 0.3);
+        break;
+      case 'success':
+        // 成功音（三连音）
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const osc3 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        const gain2 = ctx.createGain();
+        const gain3 = ctx.createGain();
+        osc1.connect(gain1); gain1.connect(ctx.destination);
+        osc2.connect(gain2); gain2.connect(ctx.destination);
+        osc3.connect(gain3); gain3.connect(ctx.destination);
+        osc1.type = osc2.type = osc3.type = 'sine';
+        osc1.frequency.setValueAtTime(523.25, now);
+        osc2.frequency.setValueAtTime(659.25, now + 0.15);
+        osc3.frequency.setValueAtTime(783.99, now + 0.3);
+        gain1.gain.setValueAtTime(0.15, now); gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        gain2.gain.setValueAtTime(0.15, now + 0.15); gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        gain3.gain.setValueAtTime(0.15, now + 0.3); gain3.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
+        osc1.start(now); osc1.stop(now + 0.15);
+        osc2.start(now + 0.15); osc2.stop(now + 0.3);
+        osc3.start(now + 0.3); osc3.stop(now + 0.45);
+        return;
+      case 'error':
+        // 错误音
+        oscillator.frequency.setValueAtTime(200, now);
+        oscillator.frequency.setValueAtTime(150, now + 0.1);
+        gainNode.gain.setValueAtTime(0.15, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        oscillator.start(now);
+        oscillator.stop(now + 0.2);
+        break;
+      case 'levelSelect':
+        // 关卡选择音
+        oscillator.frequency.setValueAtTime(660, now);
+        gainNode.gain.setValueAtTime(0.1, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+        oscillator.start(now);
+        oscillator.stop(now + 0.08);
+        break;
+      case 'modal':
+        // 弹窗打开/关闭音
+        oscillator.frequency.setValueAtTime(440, now);
+        oscillator.frequency.setValueAtTime(550, now + 0.05);
+        gainNode.gain.setValueAtTime(0.1, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        oscillator.start(now);
+        oscillator.stop(now + 0.1);
+        break;
+    }
+  }
+
+  function getCellsToRemove(level) {
+    const base = 30;
+    const increment = 3;
+    return Math.min(base + (level - 1) * increment, 58);
+  }
+
+  function getTimeThresholds(level) {
+    const base3Star = 180;
+    const base2Star = 300;
+    const increment = 30;
+    return {
+      threeStar: base3Star + (level - 1) * increment,
+      twoStar: base2Star + (level - 1) * increment
+    };
+  }
+
+  function calculateStars(level, seconds) {
+    const thresholds = getTimeThresholds(level);
+    if (seconds <= thresholds.threeStar) return 3;
+    if (seconds <= thresholds.twoStar) return 2;
+    return 1;
+  }
+
+  function getStarDisplay(stars) {
+    const filled = '⭐';
+    const empty = '☆';
+    return filled.repeat(stars) + empty.repeat(3 - stars);
+  }
+
+  function generateSudoku() {
+    const grid = Array(9).fill(null).map(() => Array(9).fill(0));
+    fillGrid(grid);
+    return grid;
+  }
+
+  function fillGrid(grid) {
+    const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        if (grid[row][col] === 0) {
+          shuffle(numbers);
+          for (const num of numbers) {
+            if (isValid(grid, row, col, num)) {
+              grid[row][col] = num;
+              if (fillGrid(grid)) return true;
+              grid[row][col] = 0;
+            }
+          }
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+  }
+
+  function isValid(grid, row, col, num) {
+    for (let i = 0; i < 9; i++) {
+      if (grid[row][i] === num || grid[i][col] === num) return false;
+    }
+    const boxRow = Math.floor(row / 3) * 3;
+    const boxCol = Math.floor(col / 3) * 3;
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        if (grid[boxRow + i][boxCol + j] === num) return false;
+      }
+    }
+    return true;
+  }
+
+  function createPuzzle(grid, level) {
+    const puzzle = grid.map(row => [...row]);
+    const cellsToRemove = getCellsToRemove(level);
+    const positions = [];
+    for (let i = 0; i < 81; i++) positions.push(i);
+    shuffle(positions);
+    for (let i = 0; i < cellsToRemove; i++) {
+      const pos = positions[i];
+      const row = Math.floor(pos / 9);
+      const col = pos % 9;
+      puzzle[row][col] = 0;
+    }
+    return puzzle;
+  }
+
+  function renderBoard() {
+    boardEl.innerHTML = '';
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.row = row;
+        cell.dataset.col = col;
+        if (givenCells[row][col]) {
+          cell.classList.add('given');
+          cell.textContent = board[row][col];
+        } else if (board[row][col] !== 0) {
+          cell.textContent = board[row][col];
+        }
+        cell.addEventListener('click', () => selectCell(row, col));
+        boardEl.appendChild(cell);
+      }
+    }
+  }
+
+  function updateLevelSelector() {
+    const buttons = levelSelectorEl.querySelectorAll('.level-btn');
+    buttons.forEach((btn, index) => {
+      const level = index + 1;
+      btn.classList.remove('active', 'completed', 'locked');
+      const maxUnlocked = completedLevels.length > 0 ? Math.max(...completedLevels) + 1 : 1;
+      if (level === currentLevel) {
+        btn.classList.add('active');
+      } else if (completedLevels.includes(level)) {
+        btn.classList.add('completed');
+      } else if (level > maxUnlocked) {
+        btn.classList.add('locked');
+      }
+    });
+  }
+
+  function selectLevel(level) {
+    const maxUnlocked = completedLevels.length > 0 ? Math.max(...completedLevels) + 1 : 1;
+    if (level > maxUnlocked) return;
+    playSound('levelSelect');
+    currentLevel = level;
+    currentLevelEl.textContent = level;
+    updateLevelSelector();
+    newGame();
+  }
+
+  function selectCell(row, col) {
+    if (gameWon) return;
+    playSound('click');
+    selectedCell = { row, col };
+    updateHighlights();
+  }
+
+  function updateHighlights() {
+    const cells = document.querySelectorAll('.cell');
+    cells.forEach(cell => {
+      cell.classList.remove('selected', 'highlight', 'same-number');
+    });
+    if (!selectedCell) return;
+    const { row, col } = selectedCell;
+    const selectedValue = board[row][col];
+    const boxRow = Math.floor(row / 3) * 3;
+    const boxCol = Math.floor(col / 3) * 3;
+    cells.forEach(cell => {
+      const r = parseInt(cell.dataset.row);
+      const c = parseInt(cell.dataset.col);
+      if (r === row && c === col) {
+        cell.classList.add('selected');
+      } else if (r === row || c === col || (r >= boxRow && r < boxRow + 3 && c >= boxCol && c < boxCol + 3)) {
+        cell.classList.add('highlight');
+      }
+      if (selectedValue !== 0 && board[r][c] === selectedValue) {
+        cell.classList.add('same-number');
+      }
+    });
+  }
+
+  function fillNumber(num) {
+    if (!selectedCell || gameWon) return;
+    const { row, col } = selectedCell;
+    if (givenCells[row][col]) return;
+    board[row][col] = num;
+    const cell = boardEl.children[row * 9 + col];
+    cell.textContent = num;
+    cell.classList.remove('error');
+    updateHighlights();
+    checkConflicts();
+    playSound('fill');
+    if (isComplete()) {
+      if (isCorrect()) {
+        gameWon = true;
+        stopTimer();
+        if (!completedLevels.includes(currentLevel)) {
+          completedLevels.push(currentLevel);
+        }
+        const stars = calculateStars(currentLevel, seconds);
+        levelStars[currentLevel] = stars;
+        playSound('success');
+        showLevelComplete(stars);
+      }
+    }
+  }
+
+  function showLevelComplete(stars) {
+    const starDisplay = getStarDisplay(stars);
+    statusEl.textContent = `🎉 恭喜！第 ${currentLevel} 关完成！用时 ${formatTime(seconds)}`;
+    statusEl.className = 'status-bar success';
+    starsEl.textContent = starDisplay;
+    starsEl.classList.add('show');
+    nextLevelBtn.style.display = currentLevel < 10 ? 'block' : 'none';
+    updateLevelSelector();
+    modalStars.textContent = starDisplay;
+    modalTime.textContent = `用时：${formatTime(seconds)}`;
+    setTimeout(() => {
+      modalOverlay.classList.add('show');
+    }, 500);
+  }
+
+  function formatTime(secs) {
+    const mins = Math.floor(secs / 60);
+    const sec = secs % 60;
+    return `${mins}分${sec}秒`;
+  }
+
+  function eraseNumber() {
+    if (!selectedCell || gameWon) return;
+    const { row, col } = selectedCell;
+    if (givenCells[row][col]) return;
+    board[row][col] = 0;
+    const cell = boardEl.children[row * 9 + col];
+    cell.textContent = '';
+    cell.classList.remove('error');
+    updateHighlights();
+    playSound('erase');
+  }
+
+  function checkConflicts() {
+    const cells = document.querySelectorAll('.cell');
+    cells.forEach(cell => cell.classList.remove('error'));
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        if (board[row][col] === 0) continue;
+        if (givenCells[row][col]) continue;
+        const num = board[row][col];
+        let hasConflict = false;
+        for (let i = 0; i < 9; i++) {
+          if (i !== col && board[row][i] === num) { hasConflict = true; break; }
+          if (i !== row && board[i][col] === num) { hasConflict = true; break; }
+        }
+        if (!hasConflict) {
+          const boxRow = Math.floor(row / 3) * 3;
+          const boxCol = Math.floor(col / 3) * 3;
+          for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+              const r = boxRow + i, c = boxCol + j;
+              if ((r !== row || c !== col) && board[r][c] === num) {
+                hasConflict = true; break;
+              }
+            }
+            if (hasConflict) break;
+          }
+        }
+        if (hasConflict) {
+          const cell = boardEl.children[row * 9 + col];
+          cell.classList.add('error');
+        }
+      }
+    }
+  }
+
+  function isComplete() {
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        if (board[row][col] === 0) return false;
+      }
+    }
+    return true;
+  }
+
+  function isCorrect() {
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        if (board[row][col] !== solution[row][col]) return false;
+      }
+    }
+    return true;
+  }
+
+  function checkSolution() {
+    if (gameWon) return;
+    let wrongCount = 0;
+    let emptyCount = 0;
+    const cells = document.querySelectorAll('.cell');
+    cells.forEach(cell => cell.classList.remove('error'));
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        if (board[row][col] === 0) {
+          emptyCount++;
+        } else if (board[row][col] !== solution[row][col]) {
+          wrongCount++;
+          const cell = boardEl.children[row * 9 + col];
+          if (!givenCells[row][col]) cell.classList.add('error');
+        }
+      }
+    }
+    if (wrongCount === 0 && emptyCount === 0) {
+      gameWon = true;
+      stopTimer();
+      if (!completedLevels.includes(currentLevel)) {
+        completedLevels.push(currentLevel);
+      }
+      const stars = calculateStars(currentLevel, seconds);
+      levelStars[currentLevel] = stars;
+      playSound('success');
+      showLevelComplete(stars);
+    } else if (wrongCount === 0) {
+      playSound('click');
+      statusEl.textContent = `目前都对！还有 ${emptyCount} 个空格待填`;
+      statusEl.className = 'status-bar';
+    } else {
+      playSound('error');
+      statusEl.textContent = `有 ${wrongCount} 个错误，请检查标红的格子`;
+      statusEl.className = 'status-bar error';
+    }
+  }
+
+  function getHint() {
+    if (gameWon) return;
+    if (hintsRemaining <= 0) {
+      playSound('error');
+      statusEl.textContent = '💡 提示次数已用完！';
+      statusEl.className = 'status-bar error';
+      return;
+    }
+    const emptyCells = [];
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        if (board[row][col] === 0 || (board[row][col] !== solution[row][col] && !givenCells[row][col])) {
+          emptyCells.push({ row, col });
+        }
+      }
+    }
+    if (emptyCells.length === 0) {
+      statusEl.textContent = '所有格子都已正确填写！';
+      statusEl.className = 'status-bar success';
+      return;
+    }
+    playSound('hint');
+    hintsRemaining--;
+    hintsCountEl.textContent = `💡 ${hintsRemaining}`;
+    hintBtn.disabled = hintsRemaining <= 0;
+    const randomCell = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+    const { row, col } = randomCell;
+    board[row][col] = solution[row][col];
+    const cell = boardEl.children[row * 9 + col];
+    cell.textContent = solution[row][col];
+    cell.classList.remove('error');
+    cell.style.background = '#d1fae5';
+    setTimeout(() => { cell.style.background = ''; updateHighlights(); }, 800);
+    if (isComplete() && isCorrect()) {
+      gameWon = true;
+      stopTimer();
+      if (!completedLevels.includes(currentLevel)) {
+        completedLevels.push(currentLevel);
+      }
+      const stars = calculateStars(currentLevel, seconds);
+      levelStars[currentLevel] = stars;
+      playSound('success');
+      showLevelComplete(stars);
+    } else {
+      statusEl.textContent = `提示：第 ${row + 1} 行第 ${col + 1} 列`;
+      statusEl.className = 'status-bar';
+    }
+  }
+
+  function nextLevel() {
+    closeModal();
+    playSound('levelSelect');
+    if (currentLevel < 10) {
+      currentLevel++;
+      currentLevelEl.textContent = currentLevel;
+      updateLevelSelector();
+      newGame();
+    }
+  }
+
+  function closeModal() {
+    playSound('modal');
+    modalOverlay.classList.remove('show');
+  }
+
+  function startTimer() {
+    stopTimer();
+    seconds = 0;
+    updateTimerDisplay();
+    timerInterval = setInterval(() => {
+      seconds++;
+      updateTimerDisplay();
+    }, 1000);
+  }
+
+  function stopTimer() {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+  }
+
+  function updateTimerDisplay() {
+    const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const secs = (seconds % 60).toString().padStart(2, '0');
+    timerEl.textContent = `${mins}:${secs}`;
+  }
+
+  function newGame() {
+    gameWon = false;
+    selectedCell = null;
+    hintsRemaining = 3;
+    hintsCountEl.textContent = '💡 3';
+    hintBtn.disabled = false;
+    nextLevelBtn.style.display = 'none';
+    starsEl.textContent = '';
+    starsEl.classList.remove('show');
+    statusEl.textContent = `第 ${currentLevel} 关：使用键盘数字键或点击下方按钮填入数字`;
+    statusEl.className = 'status-bar';
+    solution = generateSudoku();
+    board = createPuzzle(solution, currentLevel);
+    givenCells = board.map(row => row.map(val => val !== 0));
+    renderBoard();
+    startTimer();
+  }
+
+  function startGame() {
+    playSound('modal');
+    startScreenEl.style.display = 'none';
+    gameContainerEl.style.display = 'block';
+    currentLevel = 1;
+    currentLevelEl.textContent = 1;
+    completedLevels = [];
+    levelStars = {};
+    updateLevelSelector();
+    newGame();
+  }
+
+  function showStartScreen() {
+    playSound('modal');
+    stopTimer();
+    gameContainerEl.style.display = 'none';
+    startScreenEl.style.display = 'block';
+  }
+
+  function showRules() {
+    playSound('modal');
+    document.getElementById('rules-modal-overlay').classList.add('show');
+  }
+
+  function closeRules() {
+    playSound('modal');
+    document.getElementById('rules-modal-overlay').classList.remove('show');
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (gameWon) return;
+    if (!selectedCell) return;
+    if (e.key >= '1' && e.key <= '9') {
+      fillNumber(parseInt(e.key));
+    } else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') {
+      eraseNumber();
+    } else if (e.key === 'ArrowUp' && selectedCell.row > 0) {
+      selectCell(selectedCell.row - 1, selectedCell.col);
+    } else if (e.key === 'ArrowDown' && selectedCell.row < 8) {
+      selectCell(selectedCell.row + 1, selectedCell.col);
+    } else if (e.key === 'ArrowLeft' && selectedCell.col > 0) {
+      selectCell(selectedCell.row, selectedCell.col - 1);
+    } else if (e.key === 'ArrowRight' && selectedCell.col < 8) {
+      selectCell(selectedCell.row, selectedCell.col + 1);
+    }
+  });
+</script>
+</body>
+</html>
