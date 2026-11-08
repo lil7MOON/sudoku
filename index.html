@@ -227,6 +227,46 @@
     color: #667eea;
     background: rgba(102, 126, 234, 0.05);
   }
+  .save-info {
+    display: none;
+    font-size: 13px;
+    color: #5568d3;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 18px;
+    line-height: 1.5;
+  }
+  .reset-btn {
+    display: none;
+    margin-top: 14px;
+    background: none;
+    border: none;
+    color: #bbb;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px 8px;
+    transition: color 0.2s;
+  }
+  .reset-btn:hover {
+    color: #ef4444;
+  }
+  .restart-btn {
+    display: none;
+    margin: -6px 0 18px;
+    background: transparent;
+    border: 1px solid #e0e0e0;
+    color: #888;
+    padding: 8px 18px;
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .restart-btn:hover {
+    border-color: #667eea;
+    color: #667eea;
+  }
   .rules-modal-overlay {
     position: fixed;
     top: 0;
@@ -683,16 +723,21 @@
     
     <h1>经典数独</h1>
     <p class="subtitle">准备好挑战你的思维极限了吗？</p>
-    
+    <p class="save-info" id="save-info"></p>
+
     <button class="start-btn" onclick="startGame()">
-      <span class="play-icon">▶</span> 开始挑战
+      <span class="play-icon">▶</span> <span id="start-btn-label">开始挑战</span>
     </button>
-    
+
+    <button class="restart-btn" id="restart-btn" onclick="restartCurrentLevel()">重新开始这一局</button>
+
     <button class="rules-btn" onclick="showRules()">
       📖 游戏规则
     </button>
-    
-    <p class="hint-text">点击按钮开始你的数独之旅</p>
+
+    <button class="reset-btn" id="reset-btn" onclick="resetProgress()">清除进度</button>
+
+    <p class="hint-text" id="hint-text">点击按钮开始你的数独之旅</p>
   </div>
 
   <div class="rules-modal-overlay" id="rules-modal-overlay">
@@ -809,6 +854,7 @@
   let board = [];
   let solution = [];
   let givenCells = [];
+  let puzzle = [];
   let selectedCell = null;
   let timerInterval = null;
   let seconds = 0;
@@ -817,6 +863,7 @@
   let completedLevels = [];
   let hintsRemaining = 3;
   let levelStars = {};
+  let pendingSnapshot = null; // 待恢复的对局快照（来自 localStorage）
 
   const startScreenEl = document.getElementById('start-screen');
   const gameContainerEl = document.getElementById('game-container');
@@ -833,6 +880,11 @@
   const modalTitle = document.getElementById('modal-title');
   const modalStars = document.getElementById('modal-stars');
   const modalTime = document.getElementById('modal-time');
+  const startBtnLabelEl = document.getElementById('start-btn-label');
+  const saveInfoEl = document.getElementById('save-info');
+  const resetBtnEl = document.getElementById('reset-btn');
+  const restartBtnEl = document.getElementById('restart-btn');
+  const hintTextEl = document.getElementById('hint-text');
 
   // 音效系统
   let audioCtx = null;
@@ -1159,6 +1211,7 @@
     buttons.forEach((btn, index) => {
       const level = index + 1;
       btn.classList.remove('active', 'completed', 'locked');
+      btn.title = levelStars[level] ? `第 ${level} 关 · 最佳 ${levelStars[level]} 星` : `第 ${level} 关`;
       const maxUnlocked = completedLevels.length > 0 ? Math.max(...completedLevels) + 1 : 1;
       if (level === currentLevel) {
         btn.classList.add('active');
@@ -1222,6 +1275,7 @@
     updateHighlights();
     checkConflicts();
     playSound('fill');
+    saveGameState();
     if (isComplete()) {
       if (isCorrect()) {
         gameWon = true;
@@ -1243,7 +1297,8 @@
     statusEl.className = 'status-bar success';
     starsEl.textContent = starDisplay;
     starsEl.classList.add('show');
-    nextLevelBtn.style.display = currentLevel < 10 ? 'block' : 'none';
+    nextLevelBtn.style.display = currentLevel < MAX_LEVEL ? 'block' : 'none';
+    saveProgress(null); // 本关已完成，清掉「可继续」的快照，只保留解锁与星级
     updateLevelSelector();
     modalStars.textContent = starDisplay;
     modalTime.textContent = `用时：${formatTime(seconds)}`;
@@ -1258,6 +1313,187 @@
     return `${mins}分${sec}秒`;
   }
 
+  // ===== 进度存储：解锁情况、星级与未完成的对局都存进 localStorage =====
+  const STORAGE_KEY = 'sudoku.progress.v1';
+  const MAX_LEVEL = 10;
+
+  function isValidGrid(grid, allowEmpty) {
+    if (!Array.isArray(grid) || grid.length !== 9) return false;
+    for (const row of grid) {
+      if (!Array.isArray(row) || row.length !== 9) return false;
+      for (const val of row) {
+        if (!Number.isInteger(val) || val < 0 || val > 9) return false;
+        if (!allowEmpty && val === 0) return false;
+      }
+    }
+    return true;
+  }
+
+  // 只信任结构完整、数字合法、且尚未完成的对局快照
+  function isValidSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return false;
+    if (!Number.isInteger(snapshot.level) || snapshot.level < 1 || snapshot.level > MAX_LEVEL) return false;
+    if (!isValidGrid(snapshot.puzzle, true)) return false;
+    if (!isValidGrid(snapshot.board, true)) return false;
+    if (!isValidGrid(snapshot.solution, false)) return false;
+    if (!Number.isFinite(snapshot.seconds) || snapshot.seconds < 0) return false;
+    if (!Number.isInteger(snapshot.hintsRemaining) || snapshot.hintsRemaining < 0 || snapshot.hintsRemaining > 3) return false;
+    let empty = 0;
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        const given = snapshot.puzzle[r][c];
+        if (given !== 0) {
+          // 已知格必须与完整解一致，棋盘上也必须还留着这个数字
+          if (given !== snapshot.solution[r][c] || snapshot.board[r][c] !== given) return false;
+        } else if (snapshot.board[r][c] === 0) {
+          empty++;
+        }
+      }
+    }
+    return empty > 0; // 全填满说明这局已结束，不再当作可继续的进度
+  }
+
+  function loadProgress() {
+    let raw = null;
+    try {
+      raw = localStorage.getItem(STORAGE_KEY);
+    } catch (e) {
+      return null; // 隐私模式等场景下 localStorage 不可用
+    }
+    if (!raw) return null;
+    let data = null;
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      return null; // 数据损坏就当没有存档
+    }
+    if (!data || data.version !== 1) return null;
+
+    const completedLevels = Array.isArray(data.completedLevels)
+      ? [...new Set(data.completedLevels.filter(l => Number.isInteger(l) && l >= 1 && l <= MAX_LEVEL))].sort((a, b) => a - b)
+      : [];
+
+    const levelStars = {};
+    if (data.levelStars && typeof data.levelStars === 'object') {
+      for (const [key, stars] of Object.entries(data.levelStars)) {
+        const level = Number(key);
+        if (Number.isInteger(level) && level >= 1 && level <= MAX_LEVEL && Number.isInteger(stars) && stars >= 1 && stars <= 3) {
+          levelStars[level] = stars;
+        }
+      }
+    }
+
+    let currentLevel = 1;
+    if (Number.isInteger(data.currentLevel) && data.currentLevel >= 1 && data.currentLevel <= MAX_LEVEL) {
+      currentLevel = data.currentLevel;
+    }
+
+    const snapshot = isValidSnapshot(data.snapshot) ? data.snapshot : null;
+    if (snapshot) {
+      currentLevel = snapshot.level; // 有未完成的对局时，以那一关为准
+    } else if (completedLevels.includes(currentLevel) && currentLevel < MAX_LEVEL) {
+      // 上次停在已通关的关卡上（没留对局），就自动推进到下一关
+      currentLevel++;
+    }
+
+    return { completedLevels, levelStars, currentLevel, snapshot };
+  }
+
+  function saveProgress(snapshot) {
+    pendingSnapshot = snapshot;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        version: 1,
+        completedLevels,
+        levelStars,
+        currentLevel,
+        snapshot
+      }));
+    } catch (e) {
+      // 写入失败（隐私模式、空间不足）时静默降级：这一局照常玩，只是不保存
+    }
+  }
+
+  // 把当前对局存成快照；已通关的对局不保存，避免首页一直提示「继续」
+  function saveGameState() {
+    if (!board.length || !puzzle.length) return;
+    if (gameWon) {
+      saveProgress(null);
+      return;
+    }
+    saveProgress({
+      level: currentLevel,
+      puzzle: puzzle.map(row => [...row]),
+      board: board.map(row => [...row]),
+      solution: solution.map(row => [...row]),
+      seconds,
+      hintsRemaining
+    });
+  }
+
+  function updateStartScreen() {
+    const unlocked = completedLevels.length > 0 ? Math.min(Math.max(...completedLevels) + 1, MAX_LEVEL) : 1;
+    const hasProgress = completedLevels.length > 0 || pendingSnapshot !== null;
+
+    if (pendingSnapshot) {
+      startBtnLabelEl.textContent = `继续第 ${pendingSnapshot.level} 关`;
+      saveInfoEl.textContent = `上次进度：第 ${pendingSnapshot.level} 关 · 已用时 ${formatTime(pendingSnapshot.seconds)}`;
+      saveInfoEl.style.display = 'block';
+    } else if (completedLevels.length >= MAX_LEVEL) {
+      startBtnLabelEl.textContent = '开始挑战';
+      saveInfoEl.textContent = `🎉 已通关全部 ${MAX_LEVEL} 关`;
+      saveInfoEl.style.display = 'block';
+    } else if (completedLevels.length > 0) {
+      startBtnLabelEl.textContent = '开始挑战';
+      saveInfoEl.textContent = `已通关 ${completedLevels.length} 关 · 已解锁到第 ${unlocked} 关`;
+      saveInfoEl.style.display = 'block';
+    } else {
+      startBtnLabelEl.textContent = '开始挑战';
+      saveInfoEl.textContent = '';
+      saveInfoEl.style.display = 'none';
+    }
+
+    resetBtnEl.style.display = hasProgress ? 'inline-block' : 'none';
+
+    // 有未完成的对局时，给一个「换一局」的出口，避免只能继续
+    restartBtnEl.style.display = pendingSnapshot ? 'inline-block' : 'none';
+    restartBtnEl.textContent = pendingSnapshot ? `重新开始第 ${pendingSnapshot.level} 关` : '重新开始这一局';
+    hintTextEl.textContent = pendingSnapshot
+      ? '棋盘和计时都替你留着，点上方按钮继续'
+      : '点击按钮开始你的数独之旅';
+  }
+
+  function restartCurrentLevel() {
+    if (!confirm('放弃当前这局的进度，重新开始吗？')) return;
+    playSound('levelSelect');
+    currentLevel = pendingSnapshot ? pendingSnapshot.level : currentLevel;
+    currentLevelEl.textContent = currentLevel;
+    pendingSnapshot = null;
+    saveProgress(null);
+    startGame();
+  }
+
+  function resetProgress() {
+    if (!confirm('确定要清除所有关卡进度吗？此操作不可撤销。')) return;
+    playSound('modal');
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {
+      // 存储不可用时忽略
+    }
+    completedLevels = [];
+    levelStars = {};
+    currentLevel = 1;
+    board = [];
+    puzzle = [];
+    givenCells = [];
+    pendingSnapshot = null;
+    stopTimer();
+    currentLevelEl.textContent = 1;
+    updateLevelSelector();
+    updateStartScreen();
+  }
+
   function eraseNumber() {
     if (!selectedCell || gameWon) return;
     const { row, col } = selectedCell;
@@ -1268,6 +1504,7 @@
     cell.classList.remove('error');
     updateHighlights();
     playSound('erase');
+    saveGameState();
   }
 
   function checkConflicts() {
@@ -1393,6 +1630,7 @@
     cell.classList.remove('error');
     cell.style.background = '#d1fae5';
     setTimeout(() => { cell.style.background = ''; updateHighlights(); }, 800);
+    saveGameState();
     if (isComplete() && isCorrect()) {
       gameWon = true;
       stopTimer();
@@ -1412,7 +1650,7 @@
   function nextLevel() {
     closeModal();
     playSound('levelSelect');
-    if (currentLevel < 10) {
+    if (currentLevel < MAX_LEVEL) {
       currentLevel++;
       currentLevelEl.textContent = currentLevel;
       updateLevelSelector();
@@ -1425,13 +1663,14 @@
     modalOverlay.classList.remove('show');
   }
 
-  function startTimer() {
+  function startTimer(initialSeconds = 0) {
     stopTimer();
-    seconds = 0;
+    seconds = initialSeconds;
     updateTimerDisplay();
     timerInterval = setInterval(() => {
       seconds++;
       updateTimerDisplay();
+      if (seconds % 5 === 0) saveGameState(); // 计时每 5 秒顺带存一次，意外关闭也丢不了太多
     }, 1000);
   }
 
@@ -1460,20 +1699,55 @@
     statusEl.textContent = `第 ${currentLevel} 关：使用键盘数字键或点击下方按钮填入数字`;
     statusEl.className = 'status-bar';
     solution = generateSudoku();
-    board = createPuzzle(solution, currentLevel);
+    puzzle = createPuzzle(solution, currentLevel);
+    board = puzzle.map(row => [...row]);
     givenCells = board.map(row => row.map(val => val !== 0));
     renderBoard();
     startTimer();
+    saveGameState();
+  }
+
+  // 从快照恢复未完成的对局：棋盘、计时、剩余提示次数都接着上次
+  function resumeGame() {
+    const snapshot = pendingSnapshot;
+    if (!snapshot) {
+      newGame();
+      return;
+    }
+    stopTimer();
+    currentLevel = snapshot.level;
+    currentLevelEl.textContent = currentLevel;
+    solution = snapshot.solution.map(row => [...row]);
+    puzzle = snapshot.puzzle.map(row => [...row]);
+    board = snapshot.board.map(row => [...row]);
+    givenCells = puzzle.map(row => row.map(val => val !== 0));
+    hintsRemaining = snapshot.hintsRemaining;
+    hintsCountEl.textContent = `💡 ${hintsRemaining}`;
+    hintBtn.disabled = hintsRemaining <= 0;
+    gameWon = false;
+    selectedCell = null;
+    nextLevelBtn.style.display = 'none';
+    starsEl.textContent = '';
+    starsEl.classList.remove('show');
+    statusEl.textContent = `第 ${currentLevel} 关：已恢复上次进度（用时 ${formatTime(snapshot.seconds)}）`;
+    statusEl.className = 'status-bar';
+    pendingSnapshot = null;
+    renderBoard();
+    updateHighlights();
+    updateLevelSelector();
+    startTimer(snapshot.seconds);
   }
 
   function startGame() {
     playSound('modal');
     startScreenEl.style.display = 'none';
     gameContainerEl.style.display = 'block';
-    currentLevel = 1;
-    currentLevelEl.textContent = 1;
-    completedLevels = [];
-    levelStars = {};
+    if (pendingSnapshot) {
+      resumeGame();
+      return;
+    }
+    currentLevel = Math.min(Math.max(currentLevel, 1), MAX_LEVEL);
+    currentLevelEl.textContent = currentLevel;
     updateLevelSelector();
     newGame();
   }
@@ -1481,8 +1755,10 @@
   function showStartScreen() {
     playSound('modal');
     stopTimer();
+    saveGameState(); // 回首页也保留这一局，点「继续」能接着玩
     gameContainerEl.style.display = 'none';
     startScreenEl.style.display = 'block';
+    updateStartScreen();
   }
 
   function showRules() {
@@ -1494,6 +1770,25 @@
     playSound('modal');
     document.getElementById('rules-modal-overlay').classList.remove('show');
   }
+
+  // ===== 启动：恢复上次保存的进度 =====
+  (function restoreSavedProgress() {
+    const saved = loadProgress();
+    if (saved) {
+      completedLevels = saved.completedLevels;
+      levelStars = saved.levelStars;
+      currentLevel = saved.currentLevel;
+      pendingSnapshot = saved.snapshot;
+    }
+    updateLevelSelector();
+    updateStartScreen();
+  })();
+
+  // 关闭页面 / 切到后台时补存一次，保证计时和最后一步都不丢
+  window.addEventListener('pagehide', saveGameState);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) saveGameState();
+  });
 
   document.addEventListener('keydown', (e) => {
     if (gameWon) return;
